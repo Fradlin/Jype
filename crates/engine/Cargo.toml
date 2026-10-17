@@ -1,0 +1,15 @@
+[package]
+name = "bangla-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Platform-independent Bangla typing session logic built on the Riti engine"
+
+[features]
+default = ["extra-layouts"]
+# National (Jatiya), Munir Optima, Borno, Avro Easy - data files taken from the
+# GPLv3 OpenBangla Keyboard project. Build with --no-default-features to leave
+# them out (Avro phonetic, Khipro and Probhat remain, all from Riti / MPL-2.0).
+extra-layouts = []
+
+[dependencies]
+riti = { path = "../../third_party/riti" }

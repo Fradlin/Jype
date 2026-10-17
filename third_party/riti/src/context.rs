@@ -1,0 +1,194 @@
+use std::cell::RefCell;
+
+use crate::khipro::method::KhiproMethod;
+use crate::phonetic::method::PhoneticMethod;
+use crate::suggestion::Suggestion;
+use crate::{config::Config, data::Data, fixed::method::FixedMethod};
+
+/// Context handle used for libRiti IM APIs
+pub struct RitiContext {
+    method: RefCell<Box<dyn Method>>,
+    config: Config,
+    data: Data,
+}
+
+impl RitiContext {
+    /// A new `RitiContext` instance.
+    pub fn new_with_config(config: &Config) -> Self {
+        let config = config.to_owned();
+        let data = Data::new();
+        let method = RefCell::new(<dyn Method>::new(&config));
+        RitiContext {
+            method,
+            config,
+            data,
+        }
+    }
+
+    /// Get suggestion for key.
+    pub fn get_suggestion_for_key(&self, key: u16, modifier: u8, selection: u8) -> Suggestion {
+        self.method
+            .borrow_mut()
+            .get_suggestion(key, modifier, selection, &self.data, &self.config)
+    }
+
+    /// A candidate of the suggestion list was committed.
+    ///
+    /// `index`: index of the candidate.
+    ///
+    /// This function will end the ongoing input session.
+    pub fn candidate_committed(&self, index: usize) {
+        self.method
+            .borrow_mut()
+            .candidate_committed(index, &self.config)
+    }
+
+    /// Update the suggestion making engine. This would also look for changes
+    /// in layout selection and AutoCorrect database.
+    pub fn update_engine(&mut self, config: &Config) {
+        // If the layout file has been changed.
+        if self.config.layout_changed(config) {
+            self.method.replace(<dyn Method>::new(config));
+        } else {
+            self.method.borrow_mut().update_engine(config);
+        }
+
+        // Update the config
+        self.config = config.to_owned();
+    }
+
+    /// Checks if there is an onging input session.         
+    pub fn ongoing_input_session(&self) -> bool {
+        self.method.borrow().ongoing_input_session()
+    }
+
+    /// Finish the ongoing input session if any.
+    pub fn finish_input_session(&self) {
+        self.method.borrow_mut().finish_input_session();
+    }
+
+    /// A BackSpace event.
+    ///
+    /// Returns a new `suggestion` after applying the BackSpace event.
+    ///
+    /// If the `ctrl` parameter is true then it deletes the whole word
+    /// in composition currently and ends the ongoing input session.
+    ///
+    /// If the internal buffer becomes empty, this function will
+    /// end the ongoing input session.
+    pub fn backspace_event(&self, ctrl: bool) -> Suggestion {
+        self.method
+            .borrow_mut()
+            .backspace_event(ctrl, &self.data, &self.config)
+    }
+}
+
+pub(crate) trait Method {
+    fn get_suggestion(
+        &mut self,
+        key: u16,
+        modifier: u8,
+        selection: u8,
+        data: &Data,
+        config: &Config,
+    ) -> Suggestion;
+    fn candidate_committed(&mut self, index: usize, config: &Config);
+    fn update_engine(&mut self, config: &Config);
+    fn ongoing_input_session(&self) -> bool;
+    fn finish_input_session(&mut self);
+    fn backspace_event(&mut self, ctrl: bool, data: &Data, config: &Config) -> Suggestion;
+}
+
+impl dyn Method {
+    fn new(config: &Config) -> Box<dyn Method> {
+        if config.is_phonetic() {
+            Box::new(PhoneticMethod::new(config))
+        } else if config.is_khipro() {
+            Box::new(KhiproMethod::new(config))
+        } else {
+            Box::new(FixedMethod::new(config))
+        }
+    }
+}
+
+/// Shift modifier key.
+///
+/// Used by the [`get_suggestion_for_key()`](struct.RitiContext.html#method.get_suggestion_for_key) function.
+pub const MODIFIER_SHIFT: u8 = 1 << 0;
+/// AltGr modifier key.
+///
+/// Used by the [`get_suggestion_for_key()`](struct.RitiContext.html#method.get_suggestion_for_key) function.
+pub const MODIFIER_ALT_GR: u8 = 1 << 1;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        config::{
+            get_fixed_method_defaults, get_khipro_method_defaults, get_phonetic_method_defaults,
+        },
+        keycodes::{VC_A, VC_E, VC_H, VC_L, VC_M, VC_P, VC_R},
+    };
+
+    #[test]
+    fn test_layout_change() {
+        // Load the context with a Phonetic layout.
+        let config = get_phonetic_method_defaults();
+        let mut context = RitiContext::new_with_config(&config);
+
+        context.get_suggestion_for_key(VC_H, 0, 0);
+        context.get_suggestion_for_key(VC_E, 0, 0);
+        context.get_suggestion_for_key(VC_L, 0, 0);
+        let suggestion = context.get_suggestion_for_key(VC_P, 0, 0);
+        context.finish_input_session();
+        assert_eq!(suggestion.get_suggestions(), ["হেল্প", "🆘"]);
+
+        // Change the layout to Fixed layout
+        let config = get_fixed_method_defaults();
+        context.update_engine(&config);
+
+        context.get_suggestion_for_key(VC_H, 0, 0);
+        context.get_suggestion_for_key(VC_E, 0, 0);
+        context.get_suggestion_for_key(VC_L, 0, 0);
+        let suggestion = context.get_suggestion_for_key(VC_P, 0, 0);
+        context.finish_input_session();
+        assert_eq!(suggestion.get_suggestions(), ["হীলপ"]);
+    }
+
+    #[test]
+    fn test_khipro_layout() {
+        // Load the context with the Khipro layout and type "amar".
+        let config = get_khipro_method_defaults();
+        let mut context = RitiContext::new_with_config(&config);
+
+        context.get_suggestion_for_key(VC_A, 0, 0);
+        context.get_suggestion_for_key(VC_M, 0, 0);
+        context.get_suggestion_for_key(VC_A, 0, 0);
+        let suggestion = context.get_suggestion_for_key(VC_R, 0, 0);
+        context.finish_input_session();
+
+        // Khipro is deterministic, so it yields a single (lonely) suggestion.
+        assert!(suggestion.is_lonely());
+        assert_eq!(suggestion.get_lonely_suggestion(), "আমার");
+
+        // Switching away to a Fixed layout should swap the method cleanly.
+        let config = get_fixed_method_defaults();
+        context.update_engine(&config);
+        context.get_suggestion_for_key(VC_H, 0, 0);
+        let suggestion = context.get_suggestion_for_key(VC_E, 0, 0);
+        context.finish_input_session();
+        assert!(!suggestion.is_lonely());
+    }
+
+    #[test]
+    fn test_without_database_path() {
+        let mut config = Config::default();
+        config.set_layout_file_path("avro_phonetic");
+        config.set_phonetic_suggestion(true);
+
+        let context = RitiContext::new_with_config(&config);
+
+        let suggestion = context.get_suggestion_for_key(VC_H, 0, 0);
+        assert_eq!(suggestion.get_suggestions(), ["হ"]);
+    }
+}
