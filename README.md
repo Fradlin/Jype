@@ -1,5 +1,9 @@
-# <img src="crates/app/assets/jype.ico" width="4%"> Jype
-### Fast, friendly Bangla typing for Windows
+<p align="center">
+  <img src="crates/app/assets/jype.ico" width="96" height="96" alt="Jype logo">
+</p>
+
+<h1 align="center">Jype</h1>
+<p align="center"><strong>Fast, friendly Bangla typing for Windows</strong></p>
 
 Jype is a small tray app that lets you type Bangla anywhere on Windows — in your
 browser, Word, Messenger, Discord, your code editor, anything — just by typing
