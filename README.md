@@ -156,4 +156,4 @@ That's it — no restart, no extra setup.
 ---
 
 *Jype is an early test release. Found a word that comes out wrong, or a font
-that doesn't look right? That's exactly what this test is for — let us know.*
+that doesn't look right? Well you are the only user, so you gotta tell me. Check `About';)*
