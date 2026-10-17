@@ -1,4 +1,4 @@
-# Jype
+# ![Jype](crates/app/assets/jype.ico)Jype
 ### Fast, friendly Bangla typing for Windows
 
 Jype is a small tray app that lets you type Bangla anywhere on Windows — in your
