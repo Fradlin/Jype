@@ -1,0 +1,38 @@
+name: Build Windows exe
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Engine tests
+        run: cargo test -p bangla-engine --release
+
+      - name: Build
+        run: cargo build --release -p jype
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory dist | Out-Null
+          Copy-Item target\release\jype.exe dist\Jype.exe
+          Copy-Item -Recurse LICENSES dist\LICENSES
+          Copy-Item THIRD_PARTY_NOTICES.md dist\
+
+      - name: Installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" installer\Jype.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Jype-windows
+          path: dist
